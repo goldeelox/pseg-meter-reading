@@ -7,6 +7,10 @@ from os import environ
 import argparse
 from slackclient import SlackClient
 import logging
+from datetime import timedelta
+from datetime import datetime
+import time
+
 
 LOGIN_PAGE = "https://nj.myaccount.pseg.com/user/login"
 LOGOUT_PAGE = "https://nj.myaccount.pseg.com/user/logout"
@@ -69,7 +73,7 @@ class Pseg():
         logging.info("scraped reading date: %s" % self.reading_date)
         if self.args.slack_api_token and self.args.slack_channel:
             slacky(self.reading_date, self.args.slack_api_token,
-                   self.args.slack_channel)
+                   self.args.slack_channel, True)
 
     def logout(self):
         self.driver.get(LOGOUT_PAGE)
@@ -80,13 +84,23 @@ class Pseg():
         self.driver.quit()
 
 
-def slacky(msg, api_token, channel_id):
+def slacky(msg, api_token, channel_id, scheduled=False):
+    msg_txt = "Your next PSE&G meter reading will be on " + msg
     client = SlackClient(api_token)
-    client.api_call(
-        "chat.postMessage",
-        channel=channel_id,
-        text="Your next PSE&G meter reading will be on " + msg
-    )
+    if scheduled:
+        ttime = datetime.strptime(msg, "%m/%d/%Y") + timedelta(days=-1.5)
+        client.api_call(
+            "chat.scheduleMessage",
+            channel=channel_id,
+            text=msg_txt,
+            post_at=time.mktime(ttime.timetuple())
+        )
+    else:
+        client.api_call(
+            "chat.postMessage",
+            channel=channel_id,
+            text=msg_txt
+        )
 
 
 if __name__ == "__main__":
