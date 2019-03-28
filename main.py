@@ -20,7 +20,7 @@ READING_DATE_XPATH = '//p[@class="f19-med-cnd next-meter-reading"]'
 class Pseg():
     def __init__(self):
         self.args = self.parseArgs()
-        self.driver = webdriver.Chrome()
+        self.chromeDriver()
 
     def parseArgs(self):
         parser = argparse.ArgumentParser(
@@ -51,6 +51,13 @@ class Pseg():
         if args.debug:
             logging.getLogger().setLevel(logging.DEBUG)
         return args
+
+    def chromeDriver(self):
+        chrome_options = webdriver.ChromeOptions()
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--disable-gpu")
+        self.driver = webdriver.Chrome(chrome_options=chrome_options)
 
     def login(self):
         logging.info("navigating to login page")
