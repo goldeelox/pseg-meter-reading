@@ -9,6 +9,8 @@ from slackclient import SlackClient
 import logging
 from datetime import timedelta
 from datetime import datetime
+import urllib.request
+import json
 import time
 
 
@@ -37,9 +39,11 @@ class Pseg():
         logging.info("navigating to login page")
         self.driver.get(LOGIN_PAGE)
         logging.info("entering username")
-        self.driver.find_element_by_id(USERNAME_FIELD_ID).send_keys(self.username)
+        self.driver.find_element_by_id(
+            USERNAME_FIELD_ID).send_keys(self.username)
         logging.info("entering password")
-        self.driver.find_element_by_id(PASSWORD_FIELD_ID).send_keys(self.password)
+        self.driver.find_element_by_id(
+            PASSWORD_FIELD_ID).send_keys(self.password)
         logging.info("clicking submit")
         self.driver.find_element_by_id(SUBMIT_BUTTON_ID).click()
         WebDriverWait(self.driver, 60).until(
@@ -84,12 +88,42 @@ class Slack():
             )
 
     def error(self, msg):
-        msg_txt = "Failed to get next PSE&G meter reading date. ```{}```".format(msg)
+        msg_txt = "Failed to get next PSE&G meter reading date. ```{}```".format(
+            msg)
         self.client.api_call(
             "chat.postMessage",
             channel=self.channel_id,
             text=msg_txt
         )
+
+
+class Discord():
+    def __init__(self, webhook):
+        self.webhook_url = webhook
+
+    def send(self, msg):
+        payload = {
+            "content": msg
+        }
+        j = json.dumps(payload).encode('utf-8')
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "PSEGBot"
+        }
+        req = urllib.request.Request(url=self.webhook_url,
+                                     method="POST", headers=headers)
+        try:
+            resp = urllib.request.urlopen(req, data=j)
+            if resp.status != 204:
+                print("Webhook invocation failed.", resp.status, resp.msg)
+        except e:
+            print(e)
+
+    def error(self, msg):
+        msg_txt = "Failed to get next PSE&G meter reading date. ```{}```".format(
+            msg)
+        self.send(msg_txt)
+
 
 def parseArgs():
     parser = argparse.ArgumentParser(
@@ -111,6 +145,10 @@ def parseArgs():
         help="slack channel to send messages to (overrides SLACK_CHANNEL)"
     )
     parser.add_argument(
+        "--discord-webhook", default=environ.get("DISCORD_WEBHOOK"),
+        help="discord webhook url to send messages to (overrides DISCORD_WEBHOOK"
+    )
+    parser.add_argument(
         "--debug", action="store_true",
         help="DEFAULT: False"
     )
@@ -121,22 +159,23 @@ def parseArgs():
         logging.getLogger().setLevel(logging.DEBUG)
     return args
 
+
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s:[%(levelname)s]:%(message)s"
     )
     args = parseArgs()
-    slack = Slack(args.slack_api_token, args.slack_channel)
+    discord = Discord(args.discord_webhook)
     client = Pseg(args.username, args.password)
     try:
         client.login()
-        reading_date = client.getReadingDate()
-        if args.slack_api_token and args.slack_channel:
-            slack.send(reading_date, True)
+        if args.discord_webhook:
+            discord.send("Your next PSE&G meter reading will be on " +
+                         client.getReadingDate())
         client.logout()
     except Exception as e:
         logging.critical(e)
-        slack.error(e)
+        discord.error(e)
     finally:
         client.quit()
